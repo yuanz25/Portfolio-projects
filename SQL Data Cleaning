@@ -1,0 +1,161 @@
+SELECT *
+FROM nashville_housing
+
+-- Standardisation of date format (removal of timestamp):
+SELECT saledate, CONVERT(DATE,saledate)
+FROM nashville_housing
+
+UPDATE nashville_housing
+SET saledate = CONVERT(DATE,saledate)
+
+-- If not updated, try:
+ALTER TABLE nashville_housing
+ADD saledateConverted DATE; 
+
+UPDATE nashville_housing
+SET saledateConverted = CONVERT(DATE,saledate)
+
+--------------------------------------------------------------------------------------------
+
+--Populate property address data by finding a reference point and do a self join: 
+SELECT * FROM nashville_housing
+WHERE propertyaddress IS NULL
+
+-- Reference point: the same parcelid refers to the same propertyaddress
+SELECT * FROM nashville_housing
+ORDER BY parcelid
+
+SELECT table1.parcelid, table1.propertyaddress, table2.parcelid, table2.propertyaddress
+FROM nashville_housing AS table1
+JOIN nashville_housing AS table2
+ON table1.parcelid = table2.parcelid 
+-- to ensure it is not data on the same row
+AND table1.uniqueid != table2.uniqueid
+WHERE table1.propertyaddress IS NULL
+
+--To populate the NULL address as the corresponding address, 
+-- Microsoft SQL server: ISNULL(expression, replacement)
+-- PostgreSQL, MySQL, Oracle: COALESCE() 
+UPDATE table1
+SET propertyaddress = COALESCE(table1.propertyaddress, table2.propertyaddress)
+FROM nashville_housing AS table1
+JOIN nashville_housing AS table2
+ON table1.parcelid = table2.parcelid 
+AND table1.uniqueid != table2.uniqueid
+WHERE table1.propertyaddress IS NULL
+
+--Check to ensure no more NULL columns:
+SELECT table1.parcelid, table1.propertyaddress, table2.parcelid, table2.propertyaddress
+FROM nashville_housing AS table1
+JOIN nashville_housing AS table2
+ON table1.parcelid = table2.parcelid 
+AND table1.uniqueid != table2.uniqueid
+WHERE table1.propertyaddress IS NULL
+
+--------------------------------------------------------------------------------------------
+
+--Breaking Address into individual columns of Address and City: 
+SELECT propertyaddress
+FROM nashville_housing
+ 
+SELECT
+SUBSTRING(propertyaddress, 1, CHARINDEX(',',propertyaddress)-1) AS address
+FROM nashville_housing
+
+SELECT
+SUBSTRING(propertyaddress, CHARINDEX(',',propertyaddress)+1, LEN(propertyaddress)) AS city
+FROM nashville_housing
+
+--Adding new columns to add those data in:
+ALTER TABLE nashville_housing
+ADD propertysplitaddress VARCHAR(255); 
+
+UPDATE nashville_housing
+SET propertysplitaddress = SUBSTRING(propertyaddress, 1, CHARINDEX(',',propertyaddress)-1)
+
+ALTER TABLE nashville_housing
+ADD propertysplitcity VARCHAR(255); 
+
+UPDATE nashville_housing
+SET propertysplitcity = SUBSTRING(propertyaddress, CHARINDEX(',',propertyaddress)+1, LEN(propertyaddress))
+
+--To view:
+SELECT * 
+FROM nashville_housing 
+
+--Another way to do it via SPLIT_PART():
+SELECT SPLIT_PART(owneraddress, ',', 1) AS ownersplitaddress, 
+SPLIT_PART(owneraddress, ',', 2) AS ownersplitcity, 
+SPLIT_PART(owneraddress, ',', 3) AS ownersplitstate,
+FROM nashville_housing
+
+ALTER TABLE nashville_housing
+ADD ownersplitaddress VARCHAR(255),
+ADD ownersplitcity VARCHAR(255),
+ADD ownersplitstate VARCHAR(255);
+
+UPDATE TABLE nashville_housing
+SET ownersplitaddress = SPLIT_PART(owneraddress, ',', 1),
+SET ownersplitcity = SPLIT_PART(owneraddress, ',', 2),
+SET ownersplitstate = SPLIT_PART(owneraddress, ',', 3);
+
+--------------------------------------------------------------------------------------------
+
+--Standardize abbrieviations of data entries:
+SELECT DISTINCT SoldAsVacant
+FROM nashville_housing
+
+-- To determine which type of abbrievation has lesser changes to make:
+SELECT DISTINCT SoldAsVacant, COUNT(SoldAsVacant)
+FROM nashville_housing
+GROUP BY SoldAsVacant
+ORDER BY 2 
+
+SELECT SoldAsVacant,
+CASE WHEN SoldAsVacant = 'Y' THEN 'Yes'
+            WHEN SoldAsVacant = 'N' THEN 'No'
+            ELSE SoldAsVacant
+            END 
+FROM nashville_housing
+
+--Update change: 
+UPDATE TABLE nashville_housing
+SET SoldAsVacant = CASE WHEN SoldAsVacant = 'Y' THEN 'Yes'
+            WHEN SoldAsVacant = 'N' THEN 'No'
+            ELSE SoldAsVacant
+            END 
+FROM nashville_housing
+
+--------------------------------------------------------------------------------------------
+
+--To remove duplicates:
+--Step 1, to assign row numbers
+SELECT *, ROW_NUMBER() OVER (PARTITION BY parcelid, propertyaddress, saleprice, saledate, legalreference
+ORDER BY uniqueid) AS row_num 
+FROM nashville_housing
+
+--Creating the CTE to get a query for window function:
+WITH RowNumCTE AS(
+     SELECT *, ROW_NUMBER() OVER (PARTITION BY parcelid, propertyaddress, saleprice, saledate, legalreference
+    ORDER BY uniqueid) AS row_num 
+    FROM nashville_housing
+)
+SELECT *
+FROM RowNumCTE
+WHERE row_num > 1
+
+--To delete the duplicates:
+WITH RowNumCTE AS(
+     SELECT *, ROW_NUMBER() OVER (PARTITION BY parcelid, propertyaddress, saleprice, saledate, legalreference
+    ORDER BY uniqueid) AS row_num 
+    FROM nashville_housing
+)
+DELETE 
+FROM RowNumCTE
+WHERE row_num > 1
+
+--------------------------------------------------------------------------------------------
+
+--To delete unused columns (not from raw data, maybe when not needed for your queries): 
+ ALTER TABLE nashville_housing
+ DROP COLUMN owneraddress, propertyaddress, taxdistrict 
