@@ -11,6 +11,8 @@ Data visualization was done on Tableau: https://public.tableau.com/app/profile/l
 How to Use:
 To reproduce the analysis or explore the data further, you can use the SQL queries provided in the repository. The data used in the analysis is available from ourworldindata.org/covid-deaths.
 
+Excel Project Dataset: This project involves the analysis of bike purchases based on several factors such as income, age category, and commute distance. The project includes data cleaning and the use of pivot tables for analysis.
+
 Contact Information:
 If you have any questions or feedback about the analysis, you can contact me at chenyy025@gmail.com
 
